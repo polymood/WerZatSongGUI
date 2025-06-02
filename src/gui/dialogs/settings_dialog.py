@@ -1,4 +1,4 @@
-from PyQt6.QtCore import QSettings, pyqtSignal, Qt
+from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem, QStackedWidget,
     QWidget, QPushButton, QLineEdit, QFileDialog, QSpinBox, QCheckBox,
@@ -7,12 +7,9 @@ from PyQt6.QtWidgets import (
 
 
 class SettingsDialog(QDialog):
-    # Emitted whenever the language combo changes
-    language_changed = pyqtSignal(str)
-
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle(self.tr("Settings"))
+        self.setWindowTitle("Settings")
         self.resize(720, 400)
 
         # QSettings uses application/organization names (set up in main.py)
@@ -25,10 +22,10 @@ class SettingsDialog(QDialog):
         self.sidebar.setHeaderHidden(True)
 
         cats = [
-            (self.tr("General"),  self._panel_general()),
-            (self.tr("Paths"),    self._panel_paths()),
-            (self.tr("Audio"),    self._panel_audio()),
-            (self.tr("Advanced"), self._panel_advanced()),
+            ("General",  self._panel_general()),
+            ("Paths",    self._panel_paths()),
+            ("Audio",    self._panel_audio()),
+            ("Advanced", self._panel_advanced()),
         ]
 
         self.panels = QStackedWidget()
@@ -46,39 +43,18 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.sidebar, 1)
         layout.addWidget(self.panels, 4)
 
-        # --- Bottom row (buttons) --- (optional; can be removed if you want)
-        btn_row   = QHBoxLayout()
-        btn_close = QPushButton(self.tr("Close"))
-        btn_close.clicked.connect(self.accept)
-        btn_row.addStretch(1)
-        btn_row.addWidget(btn_close)
-
-        layout2 = QVBoxLayout()
-        layout2.addLayout(layout)
-        layout2.addLayout(btn_row)
-        self.setLayout(layout2)
 
     # === Panels ===
     def _panel_general(self):
         panel = QWidget()
         form = QFormLayout(panel)
 
-        # 1) Language combo
-        self.combo_lang = QComboBox()
-        self.combo_lang.addItems([self.tr("English"), self.tr("French")])
-        # Load last‐saved value (default = "English")
-        lang = self.settings.value("general/language", type=str, defaultValue="English")
-        self.combo_lang.setCurrentText(lang)
-        # Save on change, and emit signal
-        self.combo_lang.currentTextChanged.connect(self._save_language)
-
-        # 2) Start maximized checkbox
-        self.chk_startup = QCheckBox(self.tr("Start app maximized"))
+        # Only the "Start app maximized" checkbox remains here
+        self.chk_startup = QCheckBox("Start app maximized")
         start_max = self.settings.value("general/start_maximized", type=bool, defaultValue=True)
         self.chk_startup.setChecked(start_max)
         self.chk_startup.stateChanged.connect(self._save_start_maximized)
 
-        form.addRow(self.tr("Language:"), self.combo_lang)
         form.addRow(self.chk_startup)
         return panel
 
@@ -86,15 +62,22 @@ class SettingsDialog(QDialog):
         panel = QWidget()
         form = QFormLayout(panel)
 
+        # Try to auto-detect ffmpeg and yt-dlp
+        ffmpeg_path = self._detect_path("ffmpeg")
+        if ffmpeg_path:
+            self.settings.setValue("paths/ffmpeg_path", ffmpeg_path)
+        ytdlp_path = self._detect_path("yt-dlp")
+        if ytdlp_path:
+            self.settings.setValue("paths/yt_dlp_path", ytdlp_path)
+
         # 1) ffmpeg path
         self.edit_ffmpeg = QLineEdit()
         ffmpeg_path = self.settings.value("paths/ffmpeg_path", type=str, defaultValue="")
         self.edit_ffmpeg.setText(ffmpeg_path)
-        # If user types manually, save immediately:
         self.edit_ffmpeg.textChanged.connect(
             lambda text: self.settings.setValue("paths/ffmpeg_path", text)
         )
-        btn_ffmpeg = QPushButton(self.tr("Browse…"))
+        btn_ffmpeg = QPushButton("Browse…")
         btn_ffmpeg.clicked.connect(lambda: self._browse_path(self.edit_ffmpeg, "ffmpeg", "paths/ffmpeg_path"))
 
         # 2) yt-dlp path
@@ -104,22 +87,34 @@ class SettingsDialog(QDialog):
         self.edit_ytdlp.textChanged.connect(
             lambda text: self.settings.setValue("paths/yt_dlp_path", text)
         )
-        btn_ytdlp = QPushButton(self.tr("Browse…"))
+        btn_ytdlp = QPushButton("Browse…")
         btn_ytdlp.clicked.connect(lambda: self._browse_path(self.edit_ytdlp, "yt-dlp", "paths/yt_dlp_path"))
 
         # 3) Default database folder
         self.edit_dbdir = QLineEdit()
-        dbdir = self.settings.value("paths/default_data_dir", type=str, defaultValue="")
+        dbdir = self.settings.value("paths/default_db_dir", type=str, defaultValue="")
         self.edit_dbdir.setText(dbdir)
         self.edit_dbdir.textChanged.connect(
-            lambda text: self.settings.setValue("paths/default_data_dir", text)
+            lambda text: self.settings.setValue("paths/default_db_dir", text)
         )
-        btn_dbdir = QPushButton(self.tr("Browse…"))
-        btn_dbdir.clicked.connect(lambda: self._browse_dir(self.edit_dbdir, "paths/default_data_dir"))
+        btn_dbdir = QPushButton("Browse…")
+        btn_dbdir.clicked.connect(lambda: self._browse_dir(self.edit_dbdir, "paths/default_db_dir"))
 
-        form.addRow(self.tr("ffmpeg path:"), self._row(self.edit_ffmpeg, btn_ffmpeg))
-        form.addRow(self.tr("yt-dlp path:"), self._row(self.edit_ytdlp, btn_ytdlp))
-        form.addRow(self.tr("Default database folder:"), self._row(self.edit_dbdir, btn_dbdir))
+        # 4) Default video save folder
+        self.edit_videodir = QLineEdit()
+        videodir = self.settings.value("paths/default_video_dir", type=str, defaultValue="")
+        self.edit_videodir.setText(videodir)
+        self.edit_videodir.textChanged.connect(
+            lambda text: self.settings.setValue("paths/default_video_dir", text)
+        )
+        btn_videodir = QPushButton("Browse…")
+        btn_videodir.clicked.connect(lambda: self._browse_dir(self.edit_videodir, "paths/default_video_dir"))
+
+
+        form.addRow("ffmpeg path:", self._row(self.edit_ffmpeg, btn_ffmpeg))
+        form.addRow("yt-dlp path:", self._row(self.edit_ytdlp, btn_ytdlp))
+        form.addRow("Default database folder:", self._row(self.edit_dbdir, btn_dbdir))
+        form.addRow("Default video save folder:", self._row(self.edit_videodir, btn_videodir))
         return panel
 
     def _panel_audio(self):
@@ -145,20 +140,20 @@ class SettingsDialog(QDialog):
             lambda text: self.settings.setValue("audio/default_sr", int(text))
         )
 
-        form.addRow(self.tr("CPU cores:"), self.spin_cores)
-        form.addRow(self.tr("Default sample rate:"), self.combo_sr)
+        form.addRow("CPU cores:", self.spin_cores)
+        form.addRow("Default sample rate:", self.combo_sr)
         return panel
 
     def _panel_advanced(self):
         panel = QWidget()
         form = QFormLayout(panel)
 
-        # “Rescan system info” button (rescans and immediately saves inside its slot)
-        self.btn_rescan = QPushButton(self.tr("Rescan system info"))
+        # “Rescan system info” button
+        self.btn_rescan = QPushButton("Rescan system info")
         self.btn_rescan.clicked.connect(self._on_rescan)
 
-        # “Open settings storage” button (just opens the file/registry)
-        self.btn_open_config = QPushButton(self.tr("Open config storage"))
+        # “Open settings storage” button
+        self.btn_open_config = QPushButton("Open config storage")
         self.btn_open_config.clicked.connect(self._on_open_config)
 
         form.addRow(self.btn_rescan)
@@ -177,14 +172,6 @@ class SettingsDialog(QDialog):
 
     # ————— Slots for immediate saving —————
 
-    def _save_language(self, new_lang: str):
-        """
-        Called whenever combo_lang changes.
-        Save to QSettings and emit language_changed.
-        """
-        self.settings.setValue("general/language", new_lang)
-        self.language_changed.emit(new_lang)
-
     def _save_start_maximized(self, state: int):
         """
         Called whenever chk_startup changes.
@@ -198,7 +185,7 @@ class SettingsDialog(QDialog):
         Open a file dialog to pick an executable. As soon as the user picks one,
         set edit.text() and save into QSettings under settings_key.
         """
-        title = self.tr(f"Find {prog} executable")
+        title = f"Find {prog} executable"
         file_path, _ = QFileDialog.getOpenFileName(self, title)
         if file_path:
             edit.setText(file_path)
@@ -209,7 +196,7 @@ class SettingsDialog(QDialog):
         Open a folder dialog. As soon as the user picks one,
         set edit.text() and save into QSettings under settings_key.
         """
-        title = self.tr("Select folder")
+        title = "Select folder"
         folder = QFileDialog.getExistingDirectory(self, title)
         if folder:
             edit.setText(folder)
@@ -245,6 +232,19 @@ class SettingsDialog(QDialog):
                     os.startfile(config_file)
                 except OSError:
                     pass
+
+    def _detect_path(self, prog: str) -> str | None:
+        """
+        Attempt to auto-detect the path of a given program (e.g. ffmpeg, yt-dlp).
+        Returns the path if found, or None if not.
+        """
+        import shutil
+        path = shutil.which(prog)
+        if path:
+            self.settings.setValue(f"paths/{prog}_path", path)
+            return path
+        else:
+            return None
 
     def _settings_path(self) -> str | None:
         """
