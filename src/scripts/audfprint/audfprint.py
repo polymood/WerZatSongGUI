@@ -28,7 +28,6 @@ import audfprint_match
 # My hash_table implementation
 import hash_table
 
-
 if sys.version_info[0] >= 3:
     # Python 3 specific definitions
     time_clock = time.process_time
@@ -36,27 +35,9 @@ else:
     # Python 2 specific definitions
     time_clock = time.clock
 
-def expand_files_and_dirs(paths, exts=None, recursive=True):
-    """
-    Given a list of files and directories, expand directories to all files inside.
-    Optionally filter by file extension(s).
-    """
-    result = []
-    for path in paths:
-        if os.path.isdir(path):
-            for root, dirs, files in os.walk(path):
-                for f in files:
-                    if exts is None or any(f.lower().endswith(e.lower()) for e in exts):
-                        result.append(os.path.join(root, f))
-                if not recursive:
-                    break  # Only top-level
-        elif os.path.isfile(path):
-            if exts is None or any(path.lower().endswith(e.lower()) for e in exts):
-                result.append(path)
-        else:
-            # Path does not exist, skip or raise
-            pass
-    return result
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 def filename_list_iterator(filelist, wavdir, wavext, listflag):
     """ Iterator to yeild all the filenames, possibly interpreting them
@@ -66,10 +47,28 @@ def filename_list_iterator(filelist, wavdir, wavext, listflag):
             yield os.path.join(wavdir, filename + wavext)
     else:
         for listfilename in filelist:
-            with open(listfilename, 'r') as f:
+            with open(listfilename, 'r', encoding="utf-8") as f:
                 for filename in f:
                     yield os.path.join(wavdir, filename.rstrip('\n') + wavext)
 
+def expand_files_and_dirs(paths, exts=None, recursive=True):
+    """
+    Expand any directories in the paths list into files, filtering by exts if given.
+    """
+    result = []
+    for path in paths:
+        if os.path.isdir(path):
+            for root, dirs, files in os.walk(path):
+                for f in files:
+                    if exts is None or any(f.lower().endswith(e.lower()) for e in exts):
+                        result.append(os.path.join(root, f))
+                if not recursive:
+                    break
+        elif os.path.isfile(path):
+            if exts is None or any(path.lower().endswith(e.lower()) for e in exts):
+                result.append(path)
+        # else: skip non-existent paths
+    return result
 
 # for saving precomputed fprints
 def ensure_dir(dirname):
@@ -111,7 +110,7 @@ def file_precompute_peaks_or_hashes(analyzer, filename, precompdir,
             precompext = audfprint_analyze.PRECOMPEXT
         else:
             precompext = audfprint_analyze.PRECOMPPKEXT
-    opfname = os.path.join(precompdir, root + precompext)
+    opfname = os.path.join(precompdir, os.path.basename(root) + precompext)
     if skip_existing and os.path.isfile(opfname):
         return ["file " + opfname + " exists (and --skip-existing); skipping"]
     else:
@@ -169,6 +168,8 @@ def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report
     """ Breaks out the core part of running the command.
         This is just the single-core versions.
     """
+    import os  # in case it's not already imported at the top
+
     if cmd == 'merge' or cmd == 'newmerge':
         # files are other hash tables, merge them in
         for filename in filename_iter:
@@ -183,11 +184,17 @@ def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report
     elif cmd == 'precompute':
         # just precompute fingerprints, single core
         for filename in filename_iter:
+            if os.path.isdir(filename):
+                report([f"Skipping directory {filename}"])
+                continue
             report(file_precompute(analyzer, filename, outdir, type, skip_existing=skip_existing, strip_prefix=strip_prefix))
 
     elif cmd == 'match':
         # Running query, single-core mode
         for num, filename in enumerate(filename_iter):
+            if os.path.isdir(filename):
+                report([f"Skipping directory {filename}"])
+                continue
             msgs = matcher.file_match_to_msgs(analyzer, hash_tab, filename, num)
             report(msgs)
 
@@ -196,18 +203,28 @@ def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report
         tothashes = 0
         ix = 0
         for filename in filename_iter:
+            if os.path.isdir(filename):
+                report([f"Skipping directory {filename}"])
+                continue
             report([time.ctime() + " ingesting #" + str(ix) + ": "
                     + filename + " ..."])
             dur, nhash = analyzer.ingest(hash_tab, filename)
             tothashes += nhash
             ix += 1
 
-        report(["Added " + str(tothashes) + " hashes "
-                + "(%.1f" % (tothashes / float(analyzer.soundfiletotaldur))
-                + " hashes/sec)"])
+        if analyzer.soundfiletotaldur > 0.:
+            report(["Added " + str(tothashes) + " hashes "
+                    + "(%.1f" % (tothashes / float(analyzer.soundfiletotaldur))
+                    + " hashes/sec)"])
+        else:
+            report(["Added " + str(tothashes) + " hashes (0.0 hashes/sec -- no audio processed)"])
+
     elif cmd == 'remove':
         # Removing files from hash table.
         for filename in filename_iter:
+            if os.path.isdir(filename):
+                report([f"Skipping directory {filename}"])
+                continue
             hash_tab.remove(filename)
 
     elif cmd == 'list':
@@ -215,6 +232,7 @@ def do_cmd(cmd, analyzer, hash_tab, filename_iter, matcher, outdir, type, report
 
     else:
         raise ValueError("unrecognized command: " + cmd)
+
 
 
 def multiproc_add(analyzer, hash_tab, filename_iter, report, ncores):
@@ -343,7 +361,7 @@ def setup_reporter(args):
     """ Creates a logging function, either to stderr or file"""
     opfile = args['--opfile']
     if opfile and len(opfile):
-        f = open(opfile, "w")
+        f = open(opfile, "w", encoding="utf-8")
 
         def report(msglist):
             """Log messages to a particular output file"""
@@ -482,9 +500,6 @@ def main(argv):
 
     # Create a matcher
     matcher = setup_matcher(args) if cmd == 'match' else None
-
-    filename_iter = filename_list_iterator(
-            args['<file>'], args['--wavdir'], args['--wavext'], args['--list'])
 
     AUDIO_EXTS = ['.wav', '.mp3', '.flac', '.ogg', '.m4a']
     input_files = expand_files_and_dirs(args['<file>'], exts=AUDIO_EXTS, recursive=True)

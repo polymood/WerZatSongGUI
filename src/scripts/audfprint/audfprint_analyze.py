@@ -577,17 +577,3 @@ def glob2hashtable(pattern, density=20.0):
     print("Added", tothashes, "(", tothashes / totdur, "hashes/sec) at ",
           elapsedtime / totdur, "x RT")
     return ht
-
-
-def local_tester():
-    test_fn = '/Users/dpwe/Downloads/carol11k.wav'
-    test_ht = hash_table.HashTable()
-    test_analyzer = Analyzer()
-
-    test_analyzer.ingest(test_ht, test_fn)
-    test_ht.save('httest.pklz')
-
-
-# Run the test function if called from the command line
-if __name__ == "__main__":
-    local_tester()

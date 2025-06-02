@@ -9,6 +9,7 @@ Fingerprint matching code for audfprint
 from __future__ import division, print_function
 import os
 import time
+import json
 
 import psutil
 import numpy as np
@@ -401,18 +402,15 @@ class Matcher(object):
                  min_time, max_time) in rslts:
                 # figure the number of raw and aligned matches for top hit
                 if self.verbose:
-                    if self.find_time_range:
-                        msg = ("Matched {:6.1f} s starting at {:6.1f} s in {:s}"
-                               " to time {:6.1f} s in {:s}").format(
-                                (max_time - min_time) * t_hop, min_time * t_hop, qry,
-                                (min_time + aligntime) * t_hop, ht.names[tophitid])
-                    else:
-                        msg = "Matched {:s} as {:s} at {:6.1f} s".format(
-                                qrymsg, ht.names[tophitid], aligntime * t_hop)
-                    msg += (" with {:5d} of {:5d} common hashes"
-                            " at rank {:2d}").format(
-                            nhashaligned, nhashraw, rank)
-                    msgrslt.append(msg)
+                    match_result = {
+                        "input_file": qry,
+                        "matched_file": ht.names[tophitid],
+                        "match_time": f"{float(aligntime * t_hop):.2f}s",
+                        "common_hashes": int(nhashaligned),
+                        "total_hashes": int(nhashraw),
+                        "rank_position": f"#{int(rank)}"
+                    }
+                    msgrslt.append(json.dumps(match_result, ensure_ascii=False))
                 else:
                     msgrslt.append(qrymsg + "\t" + ht.names[tophitid])
                 if self.illustrate:
@@ -468,23 +466,3 @@ class Matcher(object):
         plt.show()
         # Return
         return results
-
-
-def localtest():
-    """Function to provide quick test"""
-    pat = '/Users/dpwe/projects/shazam/Nine_Lives/*mp3'
-    qry = 'query.mp3'
-    hash_tab = audfprint_analyze.glob2hashtable(pat)
-    matcher = Matcher()
-    rslts, dur, nhash = matcher.match_file(audfprint_analyze.g2h_analyzer,
-                                           hash_tab, qry)
-    t_hop = 0.02322
-    print("Matched", qry, "(", dur, "s,", nhash, "hashes)",
-          "as", hash_tab.names[rslts[0][0]],
-          "at", t_hop * float(rslts[0][2]), "with", rslts[0][1],
-          "of", rslts[0][3], "hashes")
-
-
-# Run the main function if called from the command line
-if __name__ == "__main__":
-    localtest()

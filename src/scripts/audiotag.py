@@ -4,7 +4,7 @@ import time
 from typing import Any, Dict, Optional
 
 import requests
-from scripts.consts import AUDIOTAG_ENDPOINT
+from utils.consts import AUDIOTAG_ENDPOINT
 
 # How many seconds of audio to upload (e.g. 180)
 AUDIOTAG_DURATION = 180

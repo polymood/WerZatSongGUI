@@ -6,7 +6,13 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, Tuple, List
 
-from scripts.consts import FFMPEG_COMMAND, FILLER_FILE, MUSICBRAINZ_LIMIT, TEMP_FOLDER, FPCALC_COMMAND
+from utils.consts import (
+    FILLER_FILE,
+    FPCALC_COMMAND,
+    MUSICBRAINZ_LIMIT,
+    TEMP_FOLDER,
+    FFMPEG_COMMAND,
+)
 from scripts.helpers import trim_extension
 
 

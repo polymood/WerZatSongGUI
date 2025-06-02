@@ -1,78 +1,73 @@
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
     QLabel,
-    QSizePolicy,
     QSpacerItem,
+    QSizePolicy,
 )
-
-
-class _Tile(QPushButton):
-    """Compact tile that grows but never huge."""
-
-    def __init__(self, text: str) -> None:
-        super().__init__(text)
-        self.setMinimumSize(120, 80)
-        self.setMaximumSize(300, 200)
-        self.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
-        self.setStyleSheet(
-            """
-            QPushButton {
-                border: 1px solid #555;
-                border-radius: 6px;
-                background: #3a3a3a;
-                color: #ddd;
-                font-size: 13px;
-            }
-            QPushButton:hover { background: #505050; }
-            QPushButton:pressed { background: #2c2c2c; }
-            """
-        )
-
+from PyQt6.QtGui import QPixmap
 
 class WelcomePage(QWidget):
-    yt_clicked = pyqtSignal()
-    fprint_clicked = pyqtSignal()
-    scan_clicked = pyqtSignal()
-
     def __init__(self) -> None:
         super().__init__()
 
         outer = QVBoxLayout(self)
         outer.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # --- first row (two tiles) ---
-        row1 = QHBoxLayout()
-        row1.setSpacing(24)
-        row1.addWidget(self._make_tile("📺  Download from YouTube", self.yt_clicked))
-        row1.addWidget(self._make_tile("🎛  Create Fingerprint DB", self.fprint_clicked))
-        outer.addLayout(row1)
+        # --- Logo at the top ---
+        logo_path = "assets\splash.png"  # <-- Put your logo path here!
+        logo = QLabel()
+        pixmap = QPixmap(logo_path)
+        if not pixmap.isNull():
+            pixmap = pixmap.scaledToWidth(180, Qt.TransformationMode.SmoothTransformation)
+            logo.setPixmap(pixmap)
+            logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            logo.setStyleSheet("margin-bottom: 24px;")
+            outer.addWidget(logo)
+        else:
+            # fallback if image not found
+            logo.setText("Lostwave Community")
+            logo.setStyleSheet("font-size: 26px; font-weight: bold; margin-bottom: 18px; color: #67d;")
+            logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            outer.addWidget(logo)
 
-        # --- second row (one wide tile) ---
-        row2 = QHBoxLayout()
-        row2.addStretch(1)
-        row2.addWidget(self._make_tile("🔍  Identify Unknown Songs", self.scan_clicked))
-        row2.addStretch(1)
-        outer.addSpacing(20)
-        outer.addLayout(row2)
+        # --- App Title ---
+        title = QLabel("Welcome to the Lostwave Music Toolkit")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("font-size: 20px; font-weight: bold; margin-bottom: 16px; color: #fff;")
+        outer.addWidget(title)
 
-        # caption
-        caption = QLabel("Welcome — choose an action to begin.")
-        caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        caption.setStyleSheet("color:#aaa; font-size:14px; margin-top:25px;")
-        outer.addWidget(caption)
+        # --- App Description / Tabs ---
+        desc = QLabel(
+            "<b>Download from YouTube</b> — "
+            "Fetch and save music from YouTube with just a link.<br><br>"
+            "<b>Create Fingerprint DB</b> — "
+            "Analyze your music collection and generate a fingerprint database for fast song identification.<br><br>"
+            "<b>Identify Unknown Songs</b> — "
+            "Drag in an audio sample and instantly search your database for possible matches."
+        )
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setWordWrap(True)
+        desc.setStyleSheet("font-size: 15px; color: #ccc; margin-bottom: 28px;")
+        outer.addWidget(desc)
+
+        # Spacer for visual breathing room
+        outer.addSpacerItem(QSpacerItem(0, 0, vPolicy=QSizePolicy.Policy.Expanding))
+
+        # --- Special Thanks at the bottom ---
+        thanks = QLabel(
+            "<b>Special thanks to:</b><br>"
+            "• <a href='https://github.com/dpwe/audfprint'>audfprint</a> devs<br>"
+            "• <a href='https://ffmpeg.org/'>FFmpeg</a> team<br>"
+            "• <a href='https://github.com/yt-dlp/yt-dlp'>yt-dlp</a><br>"
+            "• <a href='https://www.python.org/'>Python</a>, <a href='https://www.qt.io/'>Qt</a>, and the open source community"
+        )
+        thanks.setOpenExternalLinks(True)
+        thanks.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        thanks.setStyleSheet("font-size: 13px; color: #aaa; margin-top: 16px; margin-bottom: 6px;")
+        outer.addWidget(thanks)
 
         # push everything to centre vertically
         outer.insertSpacerItem(0, QSpacerItem(0, 0, vPolicy=QSizePolicy.Policy.Expanding))
         outer.addSpacerItem(QSpacerItem(0, 0, vPolicy=QSizePolicy.Policy.Expanding))
-
-    # helper
-    def _make_tile(self, text: str, sig):
-        btn = _Tile(text)
-        btn.clicked.connect(sig.emit)
-        return btn

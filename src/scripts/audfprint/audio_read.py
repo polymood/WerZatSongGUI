@@ -273,7 +273,8 @@ class FFmpegAudioFile(object):
             if 'no such file' in line:
                 raise IOError('file not found')
             elif 'invalid data found' in line:
-                raise ValueError()
+                if not 'mjpeg' in line:
+                    raise ValueError()
             elif 'duration:' in line:
                 out_parts.append(line)
             elif 'audio:' in line:

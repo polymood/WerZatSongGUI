@@ -1,12 +1,11 @@
 from typing import List
+import os
 
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex
 from PyQt6.QtWidgets import (
     QTableView,
     QHeaderView,
-    QWidget,
-    QVBoxLayout,
-    QPushButton,
+    QWidget
 )
 
 
@@ -34,7 +33,7 @@ class JobTableModel(QAbstractTableModel):
     def columnCount(self, parent: QModelIndex = ...) -> int:        # noqa: N802
         return len(self.COLS)
 
-    def data(self, index: QModelIndex, role: int = ...) -> str:     # noqa: N802
+    def data(self, index: QModelIndex, role: int = ...) -> str:  # noqa: N802
         if not index.isValid() or role not in (Qt.ItemDataRole.DisplayRole,):
             return ""
         job = self.jobs[index.row()]
@@ -42,11 +41,26 @@ class JobTableModel(QAbstractTableModel):
         if col == 0:
             return job.url
         if col == 1:
+            if os.path.isdir(job.folder):
+                return "📁 " + job.folder
             return job.folder
         if col == 2:
             return f"{job.progress:>3d} %"
         if col == 3:
-            return job.state
+            # Always ensure icon is present for all states:
+            icon_map = {
+                "Queued": "⏳ Queued",
+                "Running": "▶ Running",
+                "Paused": "⏸ Paused",
+                "Done": "✔ Done",
+                "Error": "✖ Error",
+                "⚠ Stopped": "⚠ Stopped",
+            }
+            # If already has icon, don't double up
+            for k, v in icon_map.items():
+                if job.state.endswith(k):
+                    return v
+            return icon_map.get(job.state, job.state)
         return ""
 
     def headerData(                     # noqa: N802

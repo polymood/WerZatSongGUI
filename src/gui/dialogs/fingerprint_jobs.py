@@ -32,7 +32,6 @@ AUDFPRINT_PY = (
     Path(__file__).parents[2] / "scripts" / "audfprint" / "audfprint.py"
 )
 
-
 # ═════════════════════════════ Worker ═══════════════════════════════════════
 class FPWorker(QThread):
     progress = pyqtSignal(int)
@@ -44,7 +43,6 @@ class FPWorker(QThread):
         src: str,
         db_pklz: str,
         recurse: bool,
-        pattern: str,
         ncores: int,
         verbose: bool,
         skip_errors: bool,
@@ -53,22 +51,20 @@ class FPWorker(QThread):
         self.src = src
         self.db_pklz = db_pklz
         self.recurse = recurse
-        self.pattern = pattern
         self.ncores = ncores
         self.verbose = verbose
         self.skip_errors = skip_errors
         self._proc: subprocess.Popen | None = None
 
-    # ------------------------------------------------------------------ API
     def stop(self):
         if self._proc and self._proc.poll() is None:
             self._proc.terminate()
 
-    # ------------------------------------------------------------------ main
     def run(self):
         mode = "new" if not Path(self.db_pklz).exists() else "add"
         cmd: list[str] = [
             sys.executable,
+            "-u",
             str(AUDFPRINT_PY),
             mode,
             "--dbase",
@@ -77,6 +73,12 @@ class FPWorker(QThread):
 
         if self.skip_errors:
             cmd.append("-C")
+        if self.recurse:
+            cmd.append("--recurse")
+        if self.ncores > 1:
+            cmd += ["--ncores", str(self.ncores)]
+        if self.verbose:
+            cmd.append("--verbose")
 
         cmd.append(self.src)
 
@@ -92,12 +94,10 @@ class FPWorker(QThread):
         self.progress.emit(100)
         self.finished.emit(self._proc.returncode)
 
-
 # ═══════════════════════════ UI widget ═════════════════════════════════════
 class FingerprintJobsWidget(QWidget):
     """audfprint queue with user-configurable options."""
 
-    # ------------------------------------------------------------ ctor
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         root_layout = QVBoxLayout(self)
@@ -112,19 +112,17 @@ class FingerprintJobsWidget(QWidget):
         drive_row.addStretch(1)
         root_layout.addLayout(drive_row)
 
-        # model
         self.model = QFileSystemModel(self)
         self.model.setFilter(
             self.model.filter() | QDir.Filter.AllDirs
         )
         root_path = self.drive_combo.currentText()
 
-        # tree
         self.tree = QTreeView()
         self.tree.setModel(self.model)
         self.tree.setSelectionMode(QTreeView.SelectionMode.ExtendedSelection)
         self.tree.setColumnWidth(0, 260)
-        self._set_tree_root(root_path)  # tree is defined, no AttributeError
+        self._set_tree_root(root_path)
         root_layout.addWidget(self.tree, stretch=2)
 
         # 2) Output + options form
@@ -132,13 +130,10 @@ class FingerprintJobsWidget(QWidget):
         self.out_edit = QLineEdit()
         browse = QPushButton("…")
         browse.clicked.connect(self._browse_out)
-        form.addRow(
-            "Fingerprint DB (folder or *.pklz):", self._hrow(self.out_edit, browse)
-        )
+        form.addRow("Output fingerprint database (*.pklz):", self._hrow(self.out_edit, browse))
 
         self.chk_recurse = QCheckBox("Include sub-folders")
         self.chk_recurse.setChecked(True)
-        self.le_pattern = QLineEdit("*.mp3,*.flac,*.wav")
         self.spin_cores = QSpinBox()
         self.spin_cores.setRange(1, os.cpu_count() or 1)
         self.spin_cores.setValue(os.cpu_count() or 1)
@@ -146,7 +141,6 @@ class FingerprintJobsWidget(QWidget):
         self.chk_skip = QCheckBox("Skip unreadable files")
         self.chk_skip.setChecked(True)
 
-        form.addRow("Match patterns:", self.le_pattern)
         form.addRow("CPU cores:", self.spin_cores)
         form.addRow("", self.chk_recurse)
         form.addRow("", self.chk_skip)
@@ -188,9 +182,8 @@ class FingerprintJobsWidget(QWidget):
             self._sel_changed,  # type: ignore[arg-type]
         )
 
-    # ───────────────────────────── helpers ──────────────────────────────
     @staticmethod
-    def _hrow(*widgets) -> QWidget:  # satisfy PyCharm static-method hint
+    def _hrow(*widgets) -> QWidget:
         w = QWidget()
         h = QHBoxLayout(w)
         h.setContentsMargins(0, 0, 0, 0)
@@ -206,25 +199,26 @@ class FingerprintJobsWidget(QWidget):
         self.model.setRootPath(root_path)
         self.tree.setRootIndex(self.model.index(root_path))
 
-    # ───────────────────────────── UI slots ─────────────────────────────
     def _drive_changed(self, root: str):
         self._set_tree_root(root)
 
     def _browse_out(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select output folder")
-        if folder:
-            self.out_edit.setText(folder)
+        file, _ = QFileDialog.getSaveFileName(self, "Select output file", filter="Fingerprint DB (*.pklz)")
+        if file:
+            if not file.lower().endswith('.pklz'):
+                file += '.pklz'
+            self.out_edit.setText(file)
 
     def _add_selected(self):
-        out_dir = self.out_edit.text().strip()
-        if not out_dir:
+        out_file = self.out_edit.text().strip()
+        if not out_file or not out_file.lower().endswith(".pklz"):
             QMessageBox.warning(
-                self, "Missing folder", "Select output folder first."
+                self, "Missing output file", "Select a valid .pklz file as output."
             )
             return
         for idx in self.tree.selectionModel().selectedRows():
             path = self.model.filePath(idx)
-            self.table.model.add_job(JobItem(path, out_dir))
+            self.table.model.add_job(JobItem(path, out_file))
 
     # ───────────────────────── queue control ────────────────────────────
     def _start_selected(self):
@@ -255,17 +249,12 @@ class FingerprintJobsWidget(QWidget):
         self.table.viewport().update()
         self.log.clear()
 
-        db_path = (
-            Path(job.folder)
-            if job.folder.lower().endswith(".pklz")
-            else Path(job.folder) / "database.pklz"
-        )
-
+        db_path = Path(job.folder)
+        # No logic to append /database.pklz anymore!
         self._worker = FPWorker(
             src=job.url,
             db_pklz=str(db_path),
             recurse=self.chk_recurse.isChecked(),
-            pattern=self.le_pattern.text().strip(),
             ncores=self.spin_cores.value(),
             verbose=self.chk_verbose.isChecked(),
             skip_errors=self.chk_skip.isChecked(),
@@ -312,7 +301,6 @@ class FingerprintJobsWidget(QWidget):
         self.table.viewport().update()
         self._kick()
 
-    # ─────────── log display when user clicks row ───────────
     def _sel_changed(self):
         sel = self.table.selectionModel().selectedRows()
         if not sel:
